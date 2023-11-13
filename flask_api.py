@@ -12,18 +12,54 @@ from ddsp.vocoder import load_model, F0_Extractor, Volume_Extractor, Units_Encod
 from ddsp.core import upsample
 from enhancer import Enhancer
 
+import os
+import boto3
 
 app = Flask(__name__)
 
 CORS(app)
 
 logging.getLogger("numba").setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
+s3 = boto3.client('s3',aws_access_key_id='AKIATIVNZLQ23AQR4MPK',aws_secret_access_key='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')
+bucket = "songssam.site"
 
+checkpoint_path = "exp/multi_speaker/model_300000.pt"
+
+use_vocoder_based_enhancer = True
+
+enhancer_adaptive_key = 0
+
+select_pitch_extractor = 'crepe'
+
+limit_f0_min = 50
+limit_f0_max = 1100
+
+threhold = -60
+
+spk_id = 1
+enable_spk_id_cover = True
+
+spk_mix_dict = None
 
 @app.route("/voiceChangeModel", methods=["POST"])
 def voice_change_model():
     request_form = request.form
     wave_file = request.files.get("sample", None)
+    f_wave_path = request_form.get("wav_path",None)
+    f_ptr_path = request_form.get("fPtrPath","")
+    uuid = request_form.get("uuid","")
+
+    if not os.path.exists("exp/"+str(uuid)):
+        os.makedirs("exp/"+str(uuid))
+    else:
+        logger.info("folder already exists")
+    
+    response1 = s3.get_object(bucket,f_wave_path)
+    
+    pt_filename = "exp/"+str(uuid)+".pt"
+    s3.download_file(bucket,f_ptr_path,pt_filename)
+
     # get fSafePrefixPadLength
     f_safe_prefix_pad_length = float(request_form.get("fSafePrefixPadLength", 0))
     print("f_safe_prefix_pad_length:"+str(f_safe_prefix_pad_length))
@@ -36,8 +72,10 @@ def voice_change_model():
     # print("说话人:" + str(int_speak_id))
     # DAW所需的采样率
     daw_sample = int(float(request_form.get("sampleRate", 0)))
+    svc_model = SvcDDSP(pt_filename, use_vocoder_based_enhancer, enhancer_adaptive_key, select_pitch_extractor,
+                        limit_f0_min, limit_f0_max, threhold, spk_id, spk_mix_dict, enable_spk_id_cover)
     # http获得wav文件并转换
-    input_wav_read = io.BytesIO(wave_file.read())
+    input_wav_read = io.BytesIO(response1['Body'].read())
     # 模型推理
     _audio, _model_sr = svc_model.infer(input_wav_read, f_pitch_change, int_speak_id, f_safe_prefix_pad_length)
     tar_audio = librosa.resample(_audio, _model_sr, daw_sample)
@@ -153,26 +191,7 @@ if __name__ == "__main__":
     # 对接的是串串香火锅大佬https://github.com/zhaohui8969/VST_NetProcess-。建议使用最新版本。
     # flask部分来自diffsvc小狼大佬编写的代码。
     # config和模型得同一目录。
-    checkpoint_path = "exp/multi_speaker/model_300000.pt"
-    # 是否使用预训练的基于声码器的增强器增强输出，但对硬件要求更高。
-    use_vocoder_based_enhancer = True
-    # 结合增强器使用，0为正常音域范围（最高G5)内的高音频质量，大于0则可以防止超高音破音
-    enhancer_adaptive_key = 0
-    # f0提取器，有parselmouth, dio, harvest, crepe
-    select_pitch_extractor = 'crepe'
-    # f0范围限制(Hz)
-    limit_f0_min = 50
-    limit_f0_max = 1100
-    # 音量响应阈值(dB)
-    threhold = -60
-    # 默认说话人。以及是否优先使用默认说话人覆盖vst传入的参数。
-    spk_id = 1
-    enable_spk_id_cover = True
-    # 混合说话人字典（捏音色功能）
-    # 设置为非 None 字典会覆盖 spk_id
-    spk_mix_dict = None # {1:0.5, 2:0.5} 表示1号说话人和2号说话人的音色按照0.5:0.5的比例混合
-    svc_model = SvcDDSP(checkpoint_path, use_vocoder_based_enhancer, enhancer_adaptive_key, select_pitch_extractor,
-                        limit_f0_min, limit_f0_max, threhold, spk_id, spk_mix_dict, enable_spk_id_cover)
+    
 
     # 此处与vst插件对应，端口必须接上。
     app.run(port=6844, host="0.0.0.0", debug=False, threaded=False)
