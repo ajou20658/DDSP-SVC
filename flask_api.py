@@ -19,8 +19,6 @@ import boto3
 
 app = Flask(__name__)
 
-CORS(app)
-
 logging.getLogger("numba").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 s3 = boto3.client('s3',aws_access_key_id='AKIATIVNZLQ23AQR4MPK',aws_secret_access_key='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')
@@ -43,6 +41,7 @@ spk_id = 1
 enable_spk_id_cover = True
 
 spk_mix_dict = None
+CORS(app)
 
 @app.route("/voiceChangeModel", methods=["GET"])
 def voice_change_model():
