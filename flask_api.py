@@ -46,7 +46,7 @@ spk_mix_dict = None
 
 @app.route("/voiceChangeModel", methods=["GET"])
 def voice_change_model():
-    request_form = request.form
+    request_form = request.args
     f_wave_path = request_form.get("wav_path",None)
     f_ptr_path = request_form.get("fPtrPath","")
     uuid = request_form.get("uuid","")
