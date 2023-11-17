@@ -5,8 +5,10 @@ import numpy as np
 import slicer
 import soundfile as sf
 import librosa
-from flask import Flask, request, send_file
+from flask import Flask, request,Response
 from flask_cors import CORS
+from pydub import audio_segment
+from pydub import AudioSegment
 
 from ddsp.vocoder import load_model, F0_Extractor, Volume_Extractor, Units_Encoder
 from ddsp.core import upsample
@@ -42,10 +44,9 @@ enable_spk_id_cover = True
 
 spk_mix_dict = None
 
-@app.route("/voiceChangeModel", methods=["POST"])
+@app.route("/voiceChangeModel", methods=["GET"])
 def voice_change_model():
     request_form = request.form
-    wave_file = request.files.get("sample", None)
     f_wave_path = request_form.get("wav_path",None)
     f_ptr_path = request_form.get("fPtrPath","")
     uuid = request_form.get("uuid","")
@@ -83,7 +84,12 @@ def voice_change_model():
     out_wav_path = io.BytesIO()
     sf.write(out_wav_path, tar_audio, daw_sample, format="wav")
     out_wav_path.seek(0)
-    return send_file(out_wav_path, download_name="temp.wav", as_attachment=True)
+    mp3 = AudioSegment.from_file(out_wav_path,format="wav")
+    os.remove(pt_filename)
+    audio_bytes = mp3.raw_data
+    os.remove(out_wav_path)
+    # return send_file(out_wav_path, download_name="temp.wav", as_attachment=True)
+    return Response(audio_bytes, mimetype='audio/mpeg')
 
 
 class SvcDDSP:
