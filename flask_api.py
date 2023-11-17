@@ -56,7 +56,7 @@ def voice_change_model():
     else:
         logger.info("folder already exists")
     
-    response1 = s3.get_object(bucket,f_wave_path)
+    response1 = s3.get_object(Bucket=bucket,Key=f_wave_path)
     
     pt_filename = "exp/"+str(uuid)+".pt"
     s3.download_file(bucket,f_ptr_path,pt_filename)
