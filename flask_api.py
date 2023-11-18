@@ -49,6 +49,7 @@ def voice_change_model():
     f_wave_path = request_form.get("wav_path",None)
     f_ptr_path = request_form.get("fPtrPath","")
     uuid = request_form.get("uuid","")
+    wav_key = f_wave_path+"_to_wav"
 
     if not os.path.exists("exp/"+str(uuid)):
         os.makedirs("exp/"+str(uuid))
@@ -56,7 +57,13 @@ def voice_change_model():
         logger.info("folder already exists")
     
     response1 = s3.get_object(Bucket=bucket,Key=f_wave_path)
-    
+    mp3_data = response1['Body'].read()
+
+    audio = AudioSegment.from_mp3(io.BytesIO(mp3_data))
+
+    audio.export(wav_key,format='wav')
+    wav_data = audio.raw_audio_data
+
     pt_filename = "exp/"+str(uuid)+".pt"
     s3.download_file(bucket,f_ptr_path,pt_filename)
 
@@ -75,7 +82,7 @@ def voice_change_model():
     svc_model = SvcDDSP(pt_filename, use_vocoder_based_enhancer, enhancer_adaptive_key, select_pitch_extractor,
                         limit_f0_min, limit_f0_max, threhold, spk_id, spk_mix_dict, enable_spk_id_cover)
     # http获得wav文件并转换
-    input_wav_read = io.BytesIO(response1['Body'].read())
+    input_wav_read = io.BytesIO(wav_data['Body'].read())
     # 模型推理
     _audio, _model_sr = svc_model.infer(input_wav_read, f_pitch_change, int_speak_id, f_safe_prefix_pad_length)
     tar_audio = librosa.resample(_audio, _model_sr, daw_sample)
@@ -83,9 +90,11 @@ def voice_change_model():
     out_wav_path = io.BytesIO()
     sf.write(out_wav_path, tar_audio, daw_sample, format="wav")
     out_wav_path.seek(0)
+
+
     mp3 = AudioSegment.from_file(out_wav_path,format="wav")
     os.remove(pt_filename)
-    audio_bytes = mp3.raw_data
+    audio_bytes = mp3.export(format='mp3').read()
     os.remove(out_wav_path)
     # return send_file(out_wav_path, download_name="temp.wav", as_attachment=True)
     return Response(audio_bytes, mimetype='audio/mpeg')
